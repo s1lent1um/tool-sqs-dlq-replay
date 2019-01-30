@@ -1,4 +1,4 @@
-package main // import "github.com/Jimdo/sqs-dead-letter-requeue"
+package main
 
 import (
 	"log"
@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	app           = kingpin.New("dead-letter-requeue", "Requeues messages from a SQS dead-letter queue to the active one.")
-	queueName     = app.Arg("destination-queue-name", "Name of the destination SQS queue (e.g. prod-mgmt-website-data-www100-jimdo-com).").Required().String()
-	fromQueueName = app.Flag("source-queue-name", "Name of the source SQS queue (e.g. prod-mgmt-website-data-www100-jimdo-com-dead-letter).").String()
-	accountID     = app.Flag("account-id", "AWS account ID. (e.g. 123456789)").String()
+	app           								= kingpin.New("dlq-replay", "Requeues messages from a SQS dead-letter queue to the active one.")
+	queueName     								= app.Arg("destination-queue-name", "Name of the destination SQS queue (e.g. prod-service-crm-v2-webhooks-ringover).").Required().String()
+	fromQueueName 								= app.Flag("source-queue-name", "Name of the source SQS queue (e.g. prod-service-crm-v2-webhooks-ringover-dlq).").String()
+	accountID     								= app.Flag("account-id", "AWS account ID. (e.g. 123456789)").String()
+	maxNumberOfMessagesToRequeue 	= app.Flag("max", "Max number of messages to requeue. 0 means all messages. This will not be exactly respected due to AWS batch size").Default("0").Int()
 )
 
 func getQueueUrlnput(queueName *string, accountID *string) *sqs.GetQueueUrlInput {
@@ -38,7 +39,7 @@ func main() {
 	if *fromQueueName != "" {
 		sourceQueueName = *fromQueueName
 	} else {
-		sourceQueueName = destinationQueueName + "_dead_letter"
+		sourceQueueName = destinationQueueName + "-dlq"
 	}
 
 	sess, err := session.NewSession()
@@ -61,12 +62,19 @@ func main() {
 		return
 	}
 
-	log.Printf("Looking for messages to requeue.")
+	var totalMessagesRequeued int = 0
+	log.Printf("Looking for messages to requeue. Will requeue up to %v messages (0 being every message).", *maxNumberOfMessagesToRequeue	)
 	for {
+		if *maxNumberOfMessagesToRequeue != 0 && totalMessagesRequeued >= *maxNumberOfMessagesToRequeue {
+			log.Printf("Requeuing messages done.")
+			return
+		}
+
 		waitTimeSeconds := int64(20)
 		maxNumberOfMessages := int64(10)
 		visibilityTimeout := int64(20)
 
+		log.Printf("Requesting for messages...")
 		resp, err := conn.ReceiveMessage(&sqs.ReceiveMessageInput{
 			WaitTimeSeconds:     &waitTimeSeconds,
 			MaxNumberOfMessages: &maxNumberOfMessages,
@@ -85,7 +93,8 @@ func main() {
 			return
 		}
 
-		log.Printf("Moving %v message(s)...", numberOfMessages)
+		totalMessagesRequeued = totalMessagesRequeued + numberOfMessages
+		log.Printf("Moving %v message(s)... Total %v", numberOfMessages, totalMessagesRequeued)
 
 		var sendMessageBatchRequestEntries []*sqs.SendMessageBatchRequestEntry
 		for index, element := range messages {
