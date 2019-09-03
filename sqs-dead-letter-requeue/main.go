@@ -11,11 +11,12 @@ import (
 )
 
 var (
-	app           								= kingpin.New("dlq-replay", "Requeues messages from a SQS dead-letter queue to the active one.")
-	queueName     								= app.Arg("destination-queue-name", "Name of the destination SQS queue (e.g. prod-service-crm-v2-webhooks-ringover).").Required().String()
-	fromQueueName 								= app.Flag("source-queue-name", "Name of the source SQS queue (e.g. prod-service-crm-v2-webhooks-ringover-dlq).").String()
-	accountID     								= app.Flag("account-id", "AWS account ID. (e.g. 123456789)").String()
-	maxNumberOfMessagesToRequeue 	= app.Flag("max", "Max number of messages to requeue. 0 means all messages. This will not be exactly respected due to AWS batch size").Default("0").Int()
+	app                          = kingpin.New("dlq-replay", "Requeues messages from a SQS dead-letter queue to the active one.")
+	queueName                    = app.Arg("destination-queue-name", "Name of the destination SQS queue (e.g. prod-service-crm-v2-webhooks-ringover).").Required().String()
+	fromQueueName                = app.Flag("source-queue-name", "Name of the source SQS queue (e.g. prod-service-crm-v2-webhooks-ringover-dlq).").String()
+	accountID                    = app.Flag("account-id", "AWS account ID. (e.g. 123456789)").String()
+	jmsClassName                 = app.Arg("jms-class", "Java class for jms. (e.g. 'com.sevensenders.datahub.shipment.service.dto.ShipmentDTO')").String()
+	maxNumberOfMessagesToRequeue = app.Flag("max", "Max number of messages to requeue. 0 means all messages. This will not be exactly respected due to AWS batch size").Default("0").Int()
 )
 
 func getQueueUrlnput(queueName *string, accountID *string) *sqs.GetQueueUrlInput {
@@ -63,7 +64,7 @@ func main() {
 	}
 
 	var totalMessagesRequeued int = 0
-	log.Printf("Looking for messages to requeue. Will requeue up to %v messages (0 being every message).", *maxNumberOfMessagesToRequeue	)
+	log.Printf("Looking for messages to requeue. Will requeue up to %v messages (0 being every message).", *maxNumberOfMessagesToRequeue)
 	for {
 		if *maxNumberOfMessagesToRequeue != 0 && totalMessagesRequeued >= *maxNumberOfMessagesToRequeue {
 			log.Printf("Requeuing messages done.")
@@ -73,6 +74,15 @@ func main() {
 		waitTimeSeconds := int64(20)
 		maxNumberOfMessages := int64(10)
 		visibilityTimeout := int64(20)
+
+		messageType := "text"
+		dataType := "String"
+		attributes := make(map[string]*sqs.MessageAttributeValue)
+		attributes["JMS_SQSMessageType"] = &sqs.MessageAttributeValue{DataType: &dataType, StringValue: &messageType}
+		if *jmsClassName != "" {
+			jmsClass := *jmsClassName
+			attributes["documentType"] = &sqs.MessageAttributeValue{DataType: &dataType, StringValue: &jmsClass}
+		}
 
 		log.Printf("Requesting for messages...")
 		resp, err := conn.ReceiveMessage(&sqs.ReceiveMessageInput{
@@ -101,8 +111,10 @@ func main() {
 			i := strconv.Itoa(index)
 
 			sendMessageBatchRequestEntries = append(sendMessageBatchRequestEntries, &sqs.SendMessageBatchRequestEntry{
-				Id:          &i,
-				MessageBody: element.Body})
+				Id:                &i,
+				MessageBody:       element.Body,
+				MessageAttributes: attributes,
+			})
 		}
 
 		_, err = conn.SendMessageBatch(&sqs.SendMessageBatchInput{
