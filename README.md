@@ -17,8 +17,10 @@ Flags:
            Name of the source SQS queue (e.g. prod-service-crm-v2-webhooks-ringover-dlq).
   --account-id=ACCOUNT-ID  
            AWS account ID. (e.g. 123456789)
+  --jms-class=JMS-CLASS
+           Java class for jms. (e.g.
+           'com.sevensenders.datahub.shipment.service.dto.ShipmentDTO')
   --max=0  Max number of messages to requeue. 0 means all messages. This will not be exactly respected due to AWS batch size
-
 Args:
   <destination-queue-name>  
     Name of the destination SQS queue (e.g. prod-service-crm-v2-webhooks-ringover).
@@ -41,10 +43,10 @@ Make sure you have the environment variables for AWS set
 ```sh
 export AWS_ACCESS_KEY_ID=<my-access-key>
 export AWS_SECRET_ACCESS_KEY=<my-secret-key>
+export AWS_REGION=<aws-region>
 ```
 
 Then
 
 ```sh
-bin/dlq-replay my-queue-name
-```
+bin/dlq-replay --max=15000 --account-id=45526666666 --source-queue-name=prod_example_dead-letter --jms-class=com.example.service.dto.ShipmentDTO prod_example```

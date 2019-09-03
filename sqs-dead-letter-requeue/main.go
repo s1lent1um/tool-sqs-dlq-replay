@@ -15,7 +15,7 @@ var (
 	queueName                    = app.Arg("destination-queue-name", "Name of the destination SQS queue (e.g. prod-service-crm-v2-webhooks-ringover).").Required().String()
 	fromQueueName                = app.Flag("source-queue-name", "Name of the source SQS queue (e.g. prod-service-crm-v2-webhooks-ringover-dlq).").String()
 	accountID                    = app.Flag("account-id", "AWS account ID. (e.g. 123456789)").String()
-	jmsClassName                 = app.Arg("jms-class", "Java class for jms. (e.g. 'com.sevensenders.datahub.shipment.service.dto.ShipmentDTO')").String()
+	jmsClassName                 = app.Flag("jms-class", "Java class for jms. (e.g. 'com.sevensenders.datahub.shipment.service.dto.ShipmentDTO')").String()
 	maxNumberOfMessagesToRequeue = app.Flag("max", "Max number of messages to requeue. 0 means all messages. This will not be exactly respected due to AWS batch size").Default("0").Int()
 )
 
